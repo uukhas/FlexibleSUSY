@@ -485,6 +485,29 @@ Module[{nStrokes,controlSubstrings},
 ];
 SetAttributes[internalOrQuitInputCheck,{HoldFirst,Locked,Protected}];
 
+parseUsage[HoldPattern@MessageName[sym:_Symbol, "usage"]] :=
+Module[
+   {
+      ctrlCyan=If[!$Notebooks,"\033[1;36m",""],
+      ctrlBold=If[!$Notebooks,"\033[1;1m",""],
+      ctrlItalic=If[!$Notebooks,"\033[1;3m",""],
+      ctrlDef=If[!$Notebooks,"\033[1;0m",""]
+   },
+   Print["parse is used"];
+   FixedPoint[StringReplace[#,
+      {
+         RegularExpression["@brief\\s+"] -> "\n",
+         "@example"->"\n"<>ctrlCyan<>"example"<>ctrlDef,
+         parseParam[ctrlItalic, ctrlBold, ctrlDef],
+         "@returns"->"\n"<>ctrlCyan<>"returns"<>ctrlDef,
+         "@note"->"\n"<>ctrlCyan<>"note"<>ctrlDef
+      }]&, sym::usage]
+];
+SetAttributes[parseUsage, {HoldFirst, Locked, Protected}];
+
+parseParam[cType:_String, cParam:_String, cDef:_String] :=
+  RegularExpression["@param\\s+(\\S+)\\s+(\\S+)"] :> "\n"<>cType<>"$1"<>cDef<>" "<>cParam<>"$2"<>cDef;
+
 MakeUnknownInputDefinition[sym_Symbol] :=
 Module[{usageString,info,parsedInfo,infoString},
    (* Clean existing definitions if they exist for required pattern.. *)
@@ -492,7 +515,7 @@ Module[{usageString,info,parsedInfo,infoString},
    sym[args___] =.;
    On[Unset::norep];
    (* Maybe some useful definitions already exist*)
-   If[MatchQ[sym::usage,_String],usageString="Usage:\n"<>sym::usage<>"\n\n",usageString=""];
+   If[MatchQ[sym::usage,_String],usageString="Usage:\n"<>parseUsage[sym::usage]<>"\n\n",usageString=""];
    info = MakeBoxes@Definition@sym;
    If[MatchQ[info,InterpretationBox["Null",__]],(* True - No, there is no definitions. *)
       infoString="",
@@ -505,9 +528,12 @@ Module[{usageString,info,parsedInfo,infoString},
    ];
    sym::errUnknownInput = "`1``2`Call\n"<>StringReplace[ToString@sym,"`"->"`.`"]<>"[`3`]\nis not supported.";
    (* Define a new pattern. *)
-   sym[args___] := AssertOrQuit[False,sym::errUnknownInput,usageString,infoString,StringJoin@@Riffle[ToString/@{args},", "]];
+   With[{usage = usageString, info = infoString},
+      sym[args___] := AssertOrQuit[False,sym::errUnknownInput,usage,info,StringJoin@@Riffle[ToString/@{args},", "]];
+   ];
 ];
-MakeUnknownInputDefinition@MakeUnknownInputDefinition;
+MakeUnknownInputDefinition // MakeUnknownInputDefinition;
+MakeUnknownInputDefinition[MakeUnknownInputDefinition,3];
 SetAttributes[MakeUnknownInputDefinition,{Locked,Protected,ReadProtected}];
 
 ReadLinesInFile[fileName_String] :=
